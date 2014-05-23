@@ -40,24 +40,20 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.Fragment;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.Camera;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
-import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Toast;
 import android.widget.LinearLayout.LayoutParams;
 
-public class HeadGestureDetect extends Fragment implements CvCameraViewListener {
+public class HeadGestureDetect extends Activity implements CvCameraViewListener {
 	
 	private ArrayList<HeadGestureListener> listeners = new ArrayList<HeadGestureListener>();
 	
@@ -135,27 +131,86 @@ public class HeadGestureDetect extends Fragment implements CvCameraViewListener 
 	private Size sSize, sSize3, sSize5, sMatSize;
 	private String string, sShotText;
 
+	private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
+		@Override
+		public void onManagerConnected(int status) {
+			switch (status) {
+			case LoaderCallbackInterface.SUCCESS: {
+				mOpenCvCameraView0.enableView();
 
+				if (iNumberOfCameras > 1)
+					mOpenCvCameraView1.enableView();
+
+				try {
+					// DO FACE CASCADE SETUP
+
+					Context context = getApplicationContext();
+					InputStream is3 = context.getResources().openRawResource(
+							R.raw.haarcascade_frontalface_default);
+					File cascadeDir = context.getDir("cascade",
+							Context.MODE_PRIVATE);
+					File cascadeFile = new File(cascadeDir,
+							"haarcascade_frontalface_default.xml");
+
+					FileOutputStream os = new FileOutputStream(cascadeFile);
+
+					byte[] buffer = new byte[4096];
+					int bytesRead;
+
+					while ((bytesRead = is3.read(buffer)) != -1) {
+						os.write(buffer, 0, bytesRead);
+					}
+
+					is3.close();
+					os.close();
+
+					mCascade = new CascadeClassifier(
+							cascadeFile.getAbsolutePath());
+
+					if (mCascade.empty()) {
+						// Log.d(TAG, "Failed to load cascade classifier");
+						mCascade = null;
+					}
+
+					cascadeFile.delete();
+					cascadeDir.delete();
+
+				} catch (IOException e) {
+					e.printStackTrace();
+					// Log.d(TAG, "Failed to load cascade. Exception thrown: " +
+					// e);
+				}
+
+			}
+				break;
+			default: {
+				super.onManagerConnected(status);
+			}
+				break;
+			}
+		}
+	};
 
 	public void setOnHeadGestureDetectedListener(HeadGestureListener listener){
 		listeners.add(listener);
 	}
 	
-	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+	@Override
+	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
 		iNumberOfCameras = Camera.getNumberOfCameras();
 
 		// Log.d(TAG, "called onCreate");
 		super.onCreate(savedInstanceState);
-		//getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-		//setContentView(R.layout.head_gesture_detect);
+		setContentView(R.layout.head_gesture_detect);
 
-		mOpenCvCameraView0 = (JavaCameraView) getView().findViewById(R.id.java_surface_view0);
+		mOpenCvCameraView0 = (JavaCameraView) findViewById(R.id.java_surface_view0);
 
 		if (iNumberOfCameras > 1)
-			mOpenCvCameraView1 = (JavaCameraView) getView().findViewById(R.id.java_surface_view1);
+			mOpenCvCameraView1 = (JavaCameraView) findViewById(R.id.java_surface_view1);
 
 		mOpenCvCameraView0.setVisibility(SurfaceView.VISIBLE);
 		mOpenCvCameraView0.setCvCameraViewListener(this);
@@ -170,43 +225,9 @@ public class HeadGestureDetect extends Fragment implements CvCameraViewListener 
 					LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 		}
 
-		OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_8, this, mLoaderCallback);
-	        return inflater.inflate(R.layout.head_gesture_detect, container, false);
-	    }
-	
-//	@Override
-//	protected void onCreate(Bundle savedInstanceState) {
-//		super.onCreate(savedInstanceState);
-//
-//		iNumberOfCameras = Camera.getNumberOfCameras();
-//
-//		// Log.d(TAG, "called onCreate");
-//		super.onCreate(savedInstanceState);
-//		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-//
-//		setContentView(R.layout.head_gesture_detect);
-//
-//		mOpenCvCameraView0 = (JavaCameraView) findViewById(R.id.java_surface_view0);
-//
-//		if (iNumberOfCameras > 1)
-//			mOpenCvCameraView1 = (JavaCameraView) findViewById(R.id.java_surface_view1);
-//
-//		mOpenCvCameraView0.setVisibility(SurfaceView.VISIBLE);
-//		mOpenCvCameraView0.setCvCameraViewListener(this);
-//
-//		mOpenCvCameraView0.setLayoutParams(new LayoutParams(
-//				LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-//
-//		if (iNumberOfCameras > 1) {
-//			mOpenCvCameraView1.setVisibility(SurfaceView.GONE);
-//			mOpenCvCameraView1.setCvCameraViewListener(this);
-//			mOpenCvCameraView1.setLayoutParams(new LayoutParams(
-//					LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-//		}
-//
-//		OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_8, this,
-//				mLoaderCallback);
-//	}
+		OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_4, this,
+				mLoaderCallback);
+	}
 
 	@Override
 	public void onPause() {
@@ -218,14 +239,14 @@ public class HeadGestureDetect extends Fragment implements CvCameraViewListener 
 				mOpenCvCameraView1.disableView();
 	}
 
-//	public void onResume() {
-//		super.onResume();
-//
-//		viewMode = VIEW_MODE_RGBA;
-//
-//		OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_8, this,
-//				mLoaderCallback);
-//	}
+	public void onResume() {
+		super.onResume();
+
+		viewMode = VIEW_MODE_RGBA;
+
+		OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_4, this,
+				mLoaderCallback);
+	}
 
 	public void onDestroy() {
 		super.onDestroy();
@@ -236,20 +257,20 @@ public class HeadGestureDetect extends Fragment implements CvCameraViewListener 
 				mOpenCvCameraView1.disableView();
 	}
 
-//	@Override
-//	public boolean onCreateOptionsMenu(Menu menu) {
-//		getMenuInflater().inflate(R.menu.opencvd2, menu);
-//		return true;
-//	}
-//
-//	@Override
-//	public boolean onOptionsItemSelected(MenuItem item) {
-//		viewMode = VIEW_MODE_OPFLOW;
-//		lFrameCount = 0;
-//		lMilliStart = 0;
-//
-//		return true;
-//	}
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getMenuInflater().inflate(R.menu.opencvd2, menu);
+		return true;
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		viewMode = VIEW_MODE_OPFLOW;
+		lFrameCount = 0;
+		lMilliStart = 0;
+
+		return true;
+	}
 
 	@Override
 	public void onCameraViewStarted(int width, int height) {

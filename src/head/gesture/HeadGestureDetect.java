@@ -1,15 +1,22 @@
 package head.gesture;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.logging.FileHandler;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener;
@@ -64,7 +71,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	private  Direction left = new Direction("left",0);
 	private  Direction right = new Direction("right",0);
 	
-	private final double NOISE = (float) 3.0;
+	private final double NOISE = (float) 10.0;
 
 	public static final int VIEW_MODE_RGBA = 0;
 	public static final int VIEW_MODE_HOUGHCIRCLES = 1;
@@ -95,7 +102,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 			iCannyUpperThreshold, iAccumulator, iLineThickness = 3,
 			iHoughLinesThreshold = 50, iHoughLinesMinLineSize = 20,
 			iHoughLinesGap = 20, iMaxFaceHeight, iMaxFaceHeightIndex,
-			iFileOrdinal = 0, iCamera = 0, iNumberOfCameras = 0, iGFFTMax = 40,
+			iFileOrdinal = 0, iCamera = 0, iNumberOfCameras = 0, iGFFTMax = 20,
 			iContourAreaMin = 1000;
 
 	private JavaCameraView mOpenCvCameraView0;
@@ -130,7 +137,11 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	private Scalar colorRed, colorGreen;
 	private Size sSize, sSize3, sSize5, sMatSize;
 	private String string, sShotText;
-
+	
+	private File path;
+	private FileOutputStream fout;
+	PrintStream ps ;
+	
 	private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
 		@Override
 		public void onManagerConnected(int status) {
@@ -190,6 +201,8 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 			}
 		}
 	};
+	
+	
 
 	public void setOnHeadGestureDetectedListener(HeadGestureListener listener){
 		listeners.add(listener);
@@ -200,8 +213,14 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		super.onCreate(savedInstanceState);
 
 		iNumberOfCameras = Camera.getNumberOfCameras();
-
-		// Log.d(TAG, "called onCreate");
+		path = new File(Environment.getExternalStorageDirectory().getPath() + "/head.txt");
+		try {
+			fout = new FileOutputStream(path);
+			ps = new PrintStream(fout);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		}
+		
 		super.onCreate(savedInstanceState);
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -255,6 +274,11 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		if (iNumberOfCameras > 1)
 			if (mOpenCvCameraView1 != null)
 				mOpenCvCameraView1.disableView();
+		try {
+			fout.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	@Override
@@ -427,6 +451,11 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 
 				// get prev corners
 				Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax, 0.05, 20);
+				Mat mask = new Mat();
+				int blockSize = 3;
+				boolean useHarrisDetector = true;
+				double k = 0.04;
+				//Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax, 0.05, 20,  mask, blockSize, useHarrisDetector, k);
 				mMOP2fptsPrev.fromArray(MOPcorners.toArray());
 
 				// get safe copy of this corners
@@ -452,27 +481,21 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 				mMOP2fptsThis.copyTo(mMOP2fptsSafe);
 			}
 
-			/*
-			 * Parameters: prevImg first 8-bit input image nextImg second input
-			 * image prevPts vector of 2D points for which the flow needs to be
-			 * found; point coordinates must be single-precision floating-point
-			 * numbers. nextPts output vector of 2D points (with
-			 * single-precision floating-point coordinates) containing the
-			 * calculated new positions of input features in the second image;
-			 * when OPTFLOW_USE_INITIAL_FLOW flag is passed, the vector must
-			 * have the same size as in the input. status output status vector
-			 * (of unsigned chars); each element of the vector is set to 1 if
-			 * the flow for the corresponding features has been found,
-			 * otherwise, it is set to 0. err output vector of errors; each
-			 * element of the vector is set to an error for the corresponding
-			 * feature, type of the error measure can be set in flags parameter;
-			 * if the flow wasn't found then the error is not defined (use the
-			 * status parameter to find such cases).
-			 */
 			Video.calcOpticalFlowPyrLK(matOpFlowPrev, matOpFlowThis, mMOP2fptsPrev, mMOP2fptsThis, mMOBStatus, mMOFerr);
 
 			cornersPrev = mMOP2fptsPrev.toList();
 			cornersThis = mMOP2fptsThis.toList();
+			Integer cornerCount = cornersThis.size();
+
+			try {
+				ps.println("Harris corners count = " + cornerCount.toString() );
+				fout.flush();
+			} catch (FileNotFoundException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			
 			byteStatus = mMOBStatus.toList();
  
 			y = byteStatus.size() - 1;
@@ -482,19 +505,25 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 				if (byteStatus.get(x) == 1) {
 					pt = cornersThis.get(x);
 					pt2 = cornersPrev.get(x);
-					double m = Math.abs(pt2.y - pt.y ) / Math.abs(pt2.x - pt.x);
 					
 					double distance= Math.sqrt(Math.pow((pt.x - pt2.x),2) + Math.pow((pt.y - pt2.y),2));
-					//Log.d("Mukcay","distance = " + distance );
 					
-					if(distance < NOISE)
+					if(distance < NOISE) {
+						string = String.format("Direction: ---");
+						showTitle(string, 3, colorRed);
 						continue;
+					}
 					
-					/*if( m == 1.0 ){
-						Log.d("Mukcay","YON = KD" );
-					} else if( m < 1.0 ) {
-						Log.d("Mukcay","YON = SAG" );
-					} else Log.d("Mukcay","YON = YUKARI" );*/
+					try {
+						ps.printf("Distance = %f\n", distance );
+						fout.flush();
+					} catch (FileNotFoundException e) {
+						e.printStackTrace();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+					
+					double m = Math.abs(pt2.y - pt.y ) / Math.abs(pt2.x - pt.x);
 					
 					if (pt.x < pt2.x && pt2.y < pt.y)
 
@@ -547,12 +576,12 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 			}else{
 			
 				if (left.value < right.value) {
-					r1 = right;
-				} else r1 = left;
+					r1 = left;
+				} else r1 = right;
 				
 				if (up.value < down.value) {
-					r2 = down;
-				} else r2 = up;
+					r2 = up;
+				} else r2 = down;
 				
 				if (r1.value < r2.value) {
 					r3 = r2;

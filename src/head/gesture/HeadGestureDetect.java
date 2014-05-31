@@ -1,10 +1,8 @@
 package head.gesture;
 
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -14,9 +12,6 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.PriorityQueue;
-import java.util.logging.FileHandler;
-import java.util.logging.Logger;
-import java.util.logging.SimpleFormatter;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener;
@@ -39,17 +34,15 @@ import org.opencv.core.Size;
 import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
-import org.opencv.utils.Converters;
 import org.opencv.video.Video;
-
-import android.net.Uri;
-import android.os.Bundle;
-import android.os.Environment;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
-import android.content.Intent;
+import android.content.DialogInterface;
 import android.hardware.Camera;
+import android.os.Bundle;
+import android.os.Environment;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Menu;
@@ -57,7 +50,6 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.WindowManager;
-import android.widget.Toast;
 import android.widget.LinearLayout.LayoutParams;
 
 public class HeadGestureDetect extends Activity implements CvCameraViewListener {
@@ -71,7 +63,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	private  Direction left = new Direction("left",0);
 	private  Direction right = new Direction("right",0);
 	
-	private final double NOISE = (float) 10.0;
+	private final double NOISE = (float) 20.0;
 
 	public static final int VIEW_MODE_RGBA = 0;
 	public static final int VIEW_MODE_HOUGHCIRCLES = 1;
@@ -113,7 +105,9 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	private List<Float> ranges;
 	private List<Point> pts, corners, cornersThis, cornersPrev;
 	private List<MatOfPoint> contours;
+	private ArrayList<String> testFileList;
 
+	
 	private long lFrameCount = 0, lMilliStart = 0, lMilliNow = 0,
 			lMilliShotTime = 0;
 
@@ -140,58 +134,42 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	
 	private File path;
 	private FileOutputStream fout;
-	PrintStream ps ;
+	private PrintStream ps ;
+	private Context context;
+	private AlertDialog.Builder dialog;
+	
+	
 	
 	private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
 		@Override
 		public void onManagerConnected(int status) {
 			switch (status) {
 			case LoaderCallbackInterface.SUCCESS: {
-				mOpenCvCameraView0.enableView();
+				DialogInterface.OnClickListener dialogClickListener = new DialogInterface.OnClickListener() {
+				    @Override
+				    public void onClick(DialogInterface dialog, int which) {
+				        switch (which){
+				        case DialogInterface.BUTTON_POSITIVE:
 
-				if (iNumberOfCameras > 1)
-					mOpenCvCameraView1.enableView();
+//							if (iNumberOfCameras > 1)
+//								mOpenCvCameraView1.enableView();
+							
+				        	runFromCamera();
+				            break;
 
-				try {
-					// DO FACE CASCADE SETUP
+				        case DialogInterface.BUTTON_NEGATIVE:
+				        	onCameraViewStarted(480,720);
+				            runTest();
+				            break;
+				        }
+				        
+				        dialog.dismiss();
+				    }
+				};
 
-					Context context = getApplicationContext();
-					InputStream is3 = context.getResources().openRawResource(
-							R.raw.haarcascade_frontalface_default);
-					File cascadeDir = context.getDir("cascade",
-							Context.MODE_PRIVATE);
-					File cascadeFile = new File(cascadeDir,
-							"haarcascade_frontalface_default.xml");
-
-					FileOutputStream os = new FileOutputStream(cascadeFile);
-
-					byte[] buffer = new byte[4096];
-					int bytesRead;
-
-					while ((bytesRead = is3.read(buffer)) != -1) {
-						os.write(buffer, 0, bytesRead);
-					}
-
-					is3.close();
-					os.close();
-
-					mCascade = new CascadeClassifier(
-							cascadeFile.getAbsolutePath());
-
-					if (mCascade.empty()) {
-						// Log.d(TAG, "Failed to load cascade classifier");
-						mCascade = null;
-					}
-
-					cascadeFile.delete();
-					cascadeDir.delete();
-
-				} catch (IOException e) {
-					e.printStackTrace();
-					// Log.d(TAG, "Failed to load cascade. Exception thrown: " +
-					// e);
-				}
-
+				dialog = new AlertDialog.Builder(context);
+				dialog.setMessage("Please select").setPositiveButton("Run from camera", dialogClickListener)
+				    .setNegativeButton("Run test", dialogClickListener).show();
 			}
 				break;
 			default: {
@@ -202,8 +180,6 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		}
 	};
 	
-	
-
 	public void setOnHeadGestureDetectedListener(HeadGestureListener listener){
 		listeners.add(listener);
 	}
@@ -211,8 +187,9 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-
+		context = this;
 		iNumberOfCameras = Camera.getNumberOfCameras();
+		/*
 		path = new File(Environment.getExternalStorageDirectory().getPath() + "/head.txt");
 		try {
 			fout = new FileOutputStream(path);
@@ -220,16 +197,29 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		}
-		
+		*/
 		super.onCreate(savedInstanceState);
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
 		setContentView(R.layout.head_gesture_detect);
 
+		OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_4, this,
+				mLoaderCallback);
+	}
+	private void runTest(){
+		try {
+			onDirectoryFrame();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	private void runFromCamera(){
 		mOpenCvCameraView0 = (JavaCameraView) findViewById(R.id.java_surface_view0);
+		mOpenCvCameraView0.enableView();
+		//mOpenCvCameraView0.setRotation(90);
 
-		if (iNumberOfCameras > 1)
-			mOpenCvCameraView1 = (JavaCameraView) findViewById(R.id.java_surface_view1);
+		//if (iNumberOfCameras > 1)
+			//mOpenCvCameraView1 = (JavaCameraView) findViewById(R.id.java_surface_view1);
 
 		mOpenCvCameraView0.setVisibility(SurfaceView.VISIBLE);
 		mOpenCvCameraView0.setCvCameraViewListener(this);
@@ -237,15 +227,12 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		mOpenCvCameraView0.setLayoutParams(new LayoutParams(
 				LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
-		if (iNumberOfCameras > 1) {
-			mOpenCvCameraView1.setVisibility(SurfaceView.GONE);
-			mOpenCvCameraView1.setCvCameraViewListener(this);
-			mOpenCvCameraView1.setLayoutParams(new LayoutParams(
-					LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-		}
-
-		OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_4, this,
-				mLoaderCallback);
+//		if (iNumberOfCameras > 1) {
+//			mOpenCvCameraView1.setVisibility(SurfaceView.GONE);
+//			mOpenCvCameraView1.setCvCameraViewListener(this);
+//			mOpenCvCameraView1.setLayoutParams(new LayoutParams(
+//					LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+//		}
 	}
 
 	@Override
@@ -354,6 +341,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		matFaceHistogramThis = new Mat();
 		matOpFlowThis = new Mat();
 		matOpFlowPrev = new Mat();
+		testFileList = new ArrayList<String>();
 
 		pt = new Point(0, 0);
 		pt1 = new Point(0, 0);
@@ -380,7 +368,6 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 
 		mRgba = new Mat(height, width, CvType.CV_8UC4);
 		mIntermediateMat = new Mat(height, width, CvType.CV_8UC4);
-
 	}
 
 	@Override
@@ -410,7 +397,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		mApproxContour.release();
 
 	}
-
+	
 	@Override
 	public Mat onCameraFrame(Mat inputFrame) {
 		up.value = 0;
@@ -485,7 +472,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 
 			cornersPrev = mMOP2fptsPrev.toList();
 			cornersThis = mMOP2fptsThis.toList();
-			Integer cornerCount = cornersThis.size();
+			/*Integer cornerCount = cornersThis.size();
 
 			try {
 				ps.println("Harris corners count = " + cornerCount.toString() );
@@ -495,7 +482,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			
+			*/
 			byteStatus = mMOBStatus.toList();
  
 			y = byteStatus.size() - 1;
@@ -514,14 +501,14 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 						continue;
 					}
 					
-					try {
-						ps.printf("Distance = %f\n", distance );
-						fout.flush();
-					} catch (FileNotFoundException e) {
-						e.printStackTrace();
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
+//					try {
+//						ps.printf("Distance = %f\n", distance );
+//						fout.flush();
+//					} catch (FileNotFoundException e) {
+//						e.printStackTrace();
+//					} catch (IOException e) {
+//						e.printStackTrace();
+//					}
 					
 					double m = Math.abs(pt2.y - pt.y ) / Math.abs(pt2.x - pt.x);
 					
@@ -685,5 +672,217 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	
 	private void showTitle(String s, int iLineNum, Scalar color) {
 		Core.putText(mRgba, s, new Point(10, (int) (dTextScaleFactor * 60 * iLineNum)), Core.FONT_HERSHEY_SIMPLEX, dTextScaleFactor, color, 2);
+	}
+	public void onDirectoryFrame() throws IOException {
+
+		File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/frames/left/1");
+		
+		if (!folder.exists()) {
+			Log.d("MUKCAY", "Dizin yok!");
+			folder.mkdirs();
+			return;
+		}
+		
+		Log.d("MUKCAY", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/frames/left/1" );
+		
+		listFilesForFolder(folder);
+
+		for (int i = 0; i < testFileList.size(); i++) {
+
+			Mat img = new Mat();
+			img = Highgui.imread(testFileList.get(i));
+			onTestFrame(img,testFileList.get(i) );
+		}
+
+	}
+
+	public void listFilesForFolder(final File folder) {
+		
+		if(folder.exists() && folder.isDirectory()) {
+			File[] file_array = folder.listFiles();
+			
+			if (file_array == null) {
+				Log.d("MUKCAY", "Dosya dizisi null!");
+				return;
+			}
+			
+			for (final File fileEntry : file_array) {
+				if (fileEntry.isDirectory()) {
+					listFilesForFolder(fileEntry);
+				} else {
+					testFileList.add(fileEntry.getName());
+				}
+			}
+		}
+		else {
+			Log.d("MUKCAY", "Bu bir dosya, dizin deðil!");
+			Log.d("MUKCAY", folder.getAbsolutePath());
+		}
+	}
+	public Mat onTestFrame(Mat inputFrame, String filename) throws IOException {
+		up.value = 0;
+		down.value = 0;
+		left.value = 0;
+		right.value = 0;
+		pq.clear();		
+		
+		inputFrame.copyTo(mRgba);
+		sMatSize.width = mRgba.width();
+		sMatSize.height = mRgba.height();
+
+		if (mMOP2fptsPrev.rows() == 0) {
+
+			// Log.d("Baz", "First time opflow");
+			// first time through the loop so we need prev and this mats
+			// plus prev points
+			// get this mat
+			Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGB2GRAY);
+			
+			// copy that to prev mat
+			matOpFlowThis.copyTo(matOpFlowPrev);
+
+			// get prev corners
+			Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax,0.05, 20);
+
+			mMOP2fptsPrev.fromArray(MOPcorners.toArray());
+
+			// get safe copy of this corners
+			mMOP2fptsPrev.copyTo(mMOP2fptsSafe);
+		} else {
+			// Log.d("Baz", "Opflow");
+			// we've been through before so
+			// this mat is valid. Copy it to prev mat
+			matOpFlowThis.copyTo(matOpFlowPrev);
+
+			// get this mat
+			Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
+
+			// get the corners for this mat
+			Imgproc.goodFeaturesToTrack(matOpFlowThis, MOPcorners, iGFFTMax,
+					0.05, 20);
+			mMOP2fptsThis.fromArray(MOPcorners.toArray());
+
+			// retrieve the corners from the prev mat
+			// (saves calculating them again)
+			mMOP2fptsSafe.copyTo(mMOP2fptsPrev);
+
+			// and save this corners for next time through
+			mMOP2fptsThis.copyTo(mMOP2fptsSafe);
+		}
+		Video.calcOpticalFlowPyrLK(matOpFlowPrev, matOpFlowThis, mMOP2fptsPrev,
+				mMOP2fptsThis, mMOBStatus, mMOFerr);
+
+		cornersPrev = mMOP2fptsPrev.toList();
+		cornersThis = mMOP2fptsThis.toList();
+		byteStatus = mMOBStatus.toList();
+
+		y = byteStatus.size() - 1;
+
+		// burada bütün featurelarýn x
+		for (x = 0; x < y; x++) {
+			if (byteStatus.get(x) == 1) {
+				pt = cornersThis.get(x);
+				pt2 = cornersPrev.get(x);
+
+				double distance = Math.sqrt(Math.pow((pt.x - pt2.x), 2)
+						+ Math.pow((pt.y - pt2.y), 2));
+
+				if (distance < NOISE) {
+					ps.printf("Direction: ---");
+					fout.flush();
+					continue;
+				}
+
+				try {
+					ps.printf("Distance = %f\n", distance);
+					fout.flush();
+				} catch (FileNotFoundException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+
+				double m = Math.abs(pt2.y - pt.y) / Math.abs(pt2.x - pt.x);
+
+				if (pt.x < pt2.x && pt2.y < pt.y)
+
+					if (m > 1)
+						up.value++;
+					else
+						right.value++;
+
+				else if (pt.x < pt2.x && pt2.y == pt.y)
+					right.value++;
+
+				else if (pt.x < pt2.x && pt2.y > pt.y)
+					if (m > 1)
+						down.value++;
+					else
+						right.value++;
+
+				else if (pt.x == pt2.x && pt2.y > pt.y)
+					down.value++;
+
+				else if (pt.x > pt2.x && pt2.y > pt.y)
+					if (m > 1)
+						down.value++;
+					else
+						left.value++;
+
+				else if (pt.x > pt2.x && pt2.y == pt.y)
+					left.value++;
+
+				else if (pt.x > pt2.x && pt2.y < pt.y)
+					if (m > 1)
+						up.value++;
+					else
+						left.value++;
+
+				else if (pt.x == pt2.x && pt2.y < pt.y)
+					up.value++;
+				Core.circle(mRgba, pt, 5, colorRed, iLineThickness - 1);
+				Core.line(mRgba, pt, pt2, colorRed, iLineThickness);
+			}
+		}// end of for
+
+		Direction r1, r2, r3;
+
+		if (up.value == 0 && left.value == 0 && right.value == 0
+				&& down.value == 0) {
+			ps.printf("Direction: ---");
+			fout.flush();
+
+		} else {
+
+			if (left.value < right.value) {
+				r1 = left;
+			} else
+				r1 = right;
+
+			if (up.value < down.value) {
+				r2 = up;
+			} else
+				r2 = down;
+
+			if (r1.value < r2.value) {
+				r3 = r2;
+			} else
+				r3 = r1;
+
+			string = String.format("Direction: %s", r3.name);
+			ps.printf(string);
+			fout.flush();
+
+		}
+		
+		String file = "new"+filename;
+		Highgui.imwrite(file, mRgba);  // write to disk
+		
+		
+		// update the frame counter
+		lFrameCount++;
+		
+		return mRgba;
+
 	}
 }

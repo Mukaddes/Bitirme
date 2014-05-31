@@ -9,12 +9,12 @@
     >
 
     <org.opencv.android.JavaCameraView
+        android:id="@+id/java_surface_view0"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:visibility="gone"
         android:adjustViewBounds="true"
         android:gravity="center_vertical"
-        android:id="@+id/java_surface_view0" />
+        android:visibility="gone" />
     
     <org.opencv.android.JavaCameraView
         android:layout_width="0dp"

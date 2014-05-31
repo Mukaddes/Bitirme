@@ -2,94 +2,21 @@ package head.gesture;
 
 import head.gesture.SimpleGestureFilter.SimpleGestureListener;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
-
-import org.opencv.android.BaseLoaderCallback;
-import org.opencv.android.JavaCameraView;
-import org.opencv.android.LoaderCallbackInterface;
-import org.opencv.objdetect.CascadeClassifier;
+import java.util.LinkedList;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.SystemClock;
-import android.support.v4.app.FragmentActivity;
 import android.view.MotionEvent;
 import android.widget.Chronometer;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class SwipeScreenExample extends FragmentActivity implements SimpleGestureListener {
-	private JavaCameraView mOpenCvCameraView0;
-	private JavaCameraView mOpenCvCameraView1;
-	private CascadeClassifier mCascade;
-	private int iNumberOfCameras = 0;
-	
-	public BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
-		@Override
-		public void onManagerConnected(int status) {
-			switch (status) {
-			case LoaderCallbackInterface.SUCCESS: {
-				mOpenCvCameraView0.enableView();
-
-				if (iNumberOfCameras > 1)
-					mOpenCvCameraView1.enableView();
-
-				try {
-					// DO FACE CASCADE SETUP
-
-					Context context = getApplicationContext();
-					InputStream is3 = context.getResources().openRawResource(
-							R.raw.haarcascade_frontalface_default);
-					File cascadeDir = context.getDir("cascade",
-							Context.MODE_PRIVATE);
-					File cascadeFile = new File(cascadeDir,
-							"haarcascade_frontalface_default.xml");
-
-					FileOutputStream os = new FileOutputStream(cascadeFile);
-
-					byte[] buffer = new byte[4096];
-					int bytesRead;
-
-					while ((bytesRead = is3.read(buffer)) != -1) {
-						os.write(buffer, 0, bytesRead);
-					}
-
-					is3.close();
-					os.close();
-
-					mCascade = new CascadeClassifier(
-							cascadeFile.getAbsolutePath());
-
-					if (mCascade.empty()) {
-						// Log.d(TAG, "Failed to load cascade classifier");
-						mCascade = null;
-					}
-
-					cascadeFile.delete();
-					cascadeDir.delete();
-
-				} catch (IOException e) {
-					e.printStackTrace();
-					// Log.d(TAG, "Failed to load cascade. Exception thrown: " +
-					// e);
-				}
-
-			}
-				break;
-			default: {
-				super.onManagerConnected(status);
-			}
-				break;
-			}
-		}
-	};
+public class SwipeScreenExample extends Activity implements
+		SimpleGestureListener {
 
 	private SimpleGestureFilter detector;
 	ArrayList<Questions> questions = new ArrayList<Questions>();
@@ -97,6 +24,7 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 	Character answer;
 	int nextQ;
 	private Chronometer ch;
+	private TextView score_text;
 	
 
 	@Override
@@ -106,6 +34,8 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 		generateQuestions();
 		
 		detector = new SimpleGestureFilter(this, this);
+		score_text = (TextView)findViewById(R.id.scoreText);
+		score_text.setText("0");
 		
 		//ilk soruyu sor
 		nextQ = 0;
@@ -122,7 +52,6 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 		ch = (Chronometer) findViewById(R.id.chronometer1);
 		ch.setBase(SystemClock.elapsedRealtime());
         ch.start();
-	
 	}
 
 	
@@ -136,8 +65,7 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 	@Override
 	public void onSwipe(int direction) {
 		String str = "";
-		 
-         ch.stop();
+		
 		switch (direction) {
 
 		case SimpleGestureFilter.SWIPE_RIGHT:
@@ -156,24 +84,24 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 			answer = 'a';
 			str = "Swipe Up";
 			break;
-
 		}
 		
 		if(answer == questions.get(nextQ).getRightAnswer())
 		{
 			score = score + 100;
+			score_text.setText(score.toString());
 			new AlertDialog.Builder(this).setTitle("Doðru").setMessage(score.toString()+" Puan!").setIcon(R.drawable.ok).setNeutralButton("Kapat", null).show();
-			
+			ch.stop();
+			ch.setText("00:00");
 		}
-		else 
+		else{ 
 			new AlertDialog.Builder(this).setTitle("Üzgünüm").setMessage("Yanlýþ!").setIcon(R.drawable.wrong).setNeutralButton("Kapat", null).show();
-		
+			ch.stop();
+			ch.setText("00:00");
+		}
 		TextView tw = (TextView) findViewById(R.id.direction);
 		tw.setText(str);
 		
-		
-		
-
 		nextQ ++;
 		if(nextQ == questions.size()){
 			new AlertDialog.Builder(this).setTitle("Oyun bitti").setMessage("Toplam puanýnýz: " + score.toString()).setNeutralButton("Kapat", null).show();
@@ -186,6 +114,7 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 			startActivity(in);
 			return;
 		}
+		ch.start();
 		TextView q = (TextView)findViewById(R.id.question);
 		q.setText( questions.get(nextQ).getQuestion());
 		TextView a1 = (TextView)findViewById(R.id.answer1);
@@ -196,7 +125,6 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 		a3.setText("c. " +questions.get(nextQ).getC());
 		TextView a4 = (TextView)findViewById(R.id.answer4);
 		a4.setText("d. " +questions.get(nextQ).getD());
-			
 	}
 
 	@Override
@@ -212,12 +140,22 @@ public class SwipeScreenExample extends FragmentActivity implements SimpleGestur
 		
 		Questions q3 = new Questions("Tc anayasasýnýn ilk maddesi neyle ilgilidir?", "Devletin dini", 
 									"Devletin þekli", "Devletin bayraðý", "Devletin dili", 'b');
+		
+		Questions q4 = new Questions("Hangisi 4 ayaklý deðildir? ", "Kedi", 
+									"Tavþan", "Köpek", "Papaðan", 'd');
+		Questions q5 = new Questions("Hangisi meyve deðildir? ", "Havuç", 
+				"Elma", "Armut", "Portakal", 'a');
+		Questions q6 = new Questions("Hangisi ana renklerden deðildir?", "sarý", "mavi", "pembe", "kýrmýzý", 'c');
+		
+		Questions q7 = new Questions("Ýngilizcede ördek?", "duck", "rabbit", "bird", "dog", 'a');
+		
 		questions.add(q1);
 		questions.add(q2);
 		questions.add(q3);
-		
-		
+		questions.add(q4);
+		questions.add(q5);
+		questions.add(q6);
+		questions.add(q7);
 	}
-
-
 }
+

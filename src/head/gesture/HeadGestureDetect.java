@@ -1,5 +1,6 @@
 package head.gesture;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -18,6 +19,7 @@ import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener;
 import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
@@ -35,11 +37,16 @@ import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 import org.opencv.video.Video;
+
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapFactory.Options;
 import android.hardware.Camera;
 import android.os.Bundle;
 import android.os.Environment;
@@ -189,7 +196,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		super.onCreate(savedInstanceState);
 		context = this;
 		iNumberOfCameras = Camera.getNumberOfCameras();
-		/*
+		
 		path = new File(Environment.getExternalStorageDirectory().getPath() + "/head.txt");
 		try {
 			fout = new FileOutputStream(path);
@@ -197,7 +204,7 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		}
-		*/
+		
 		super.onCreate(savedInstanceState);
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -398,8 +405,11 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 
 	}
 	
+	static int frame_number = 0;
+	
 	@Override
 	public Mat onCameraFrame(Mat inputFrame) {
+		
 		up.value = 0;
 		down.value = 0;
 		left.value = 0;
@@ -603,7 +613,33 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 
 		if (System.currentTimeMillis() - lMilliShotTime < 1500)
 			showTitle(sShotText, 3, colorRed);
+		
+		File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/output");
+		
+		if (!folder.exists()) {
+			Log.d("MUKCAY", "Dizin yok!");
+			folder.mkdirs();
+		}
+		
+		String pathName = folder+"/picture_"+frame_number++ + ".jpeg";
+		
+		Bitmap b = Bitmap.createBitmap(inputFrame.width(), inputFrame.height() ,Config.ARGB_8888);
+		Utils.matToBitmap(mRgba, b);
+		
+		File image = new File(pathName);
+		
+	    try {
+	        image.createNewFile();
+	        // BufferedOutputStream os = new BufferedOutputStream(
+	        // new FileOutputStream(file));
 
+	        FileOutputStream os = new FileOutputStream(image);
+	        b.compress(Bitmap.CompressFormat.JPEG, 100, os);
+	        os.flush();
+	        os.close();
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
 		return mRgba;
 	}
 
@@ -643,31 +679,30 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	}
 
 	@SuppressLint("SimpleDateFormat")
-	public boolean SaveImage(Mat mat) {
+	public boolean SaveImage(Mat mat, String filename) {
 
 		Imgproc.cvtColor(mat, mIntermediateMat, Imgproc.COLOR_RGBA2BGR, 3);
 
 		File path = Environment
 				.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
 
-		String filename = "OpenCV_";
-		SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
-		Date date = new Date(System.currentTimeMillis());
-		String dateString = fmt.format(date);
-		filename += dateString + "-" + iFileOrdinal;
-		filename += ".png";
+		//String filename = "OpenCV_";
+		//SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+		//Date date = new Date(System.currentTimeMillis());
+		//String dateString = fmt.format(date);
+		//filename += dateString + "-" + iFileOrdinal;
+		//filename += ".png";
 
-		File file = new File(path, filename);
+		//File file = new File(path, filename);
 
 		Boolean bool = null;
-		filename = file.toString();
+		//filename = file.toString();
 		bool = Highgui.imwrite(filename, mIntermediateMat);
 
 		// if (bool == false)
 		// Log.d("Baz", "Fail writing image to external storage");
 
 		return bool;
-
 	}
 	
 	private void showTitle(String s, int iLineNum, Scalar color) {
@@ -675,25 +710,37 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 	}
 	public void onDirectoryFrame() throws IOException {
 
-		File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/frames/left/1");
+		File folder = 
+				new File(Environment.getExternalStoragePublicDirectory(
+						Environment.DIRECTORY_DOCUMENTS).getPath()+"/frames/right/1");
 		
 		if (!folder.exists()) {
 			Log.d("MUKCAY", "Dizin yok!");
 			folder.mkdirs();
 			return;
 		}
-		
-		Log.d("MUKCAY", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/frames/left/1" );
-		
 		listFilesForFolder(folder);
-
-		for (int i = 0; i < testFileList.size(); i++) {
-
-			Mat img = new Mat();
-			img = Highgui.imread(testFileList.get(i));
-			onTestFrame(img,testFileList.get(i) );
+		
+		//Log.d("MUKCAY", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/frames/right/1" );
+		File f = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/output");
+		
+		if (!f.exists()) {
+			Log.d("MUKCAY", "Dizin yok!");
+			f.mkdirs();
 		}
-
+		
+		
+		Mat img = Highgui.imread(folder+"/"+testFileList.get(1));
+		onTestFrame(img, testFileList.get(1) );
+		
+		for (int i = 1; i < testFileList.size(); i++) {
+			img = Highgui.imread(folder+"/"+testFileList.get(i));
+			
+			//String file = f+"/"+testFileList.get(i);
+			//Highgui.imwrite(file, mRgba);  // write to disk
+			
+			onTestFrame(img, testFileList.get(i) );
+		}
 	}
 
 	public void listFilesForFolder(final File folder) {
@@ -724,165 +771,261 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		down.value = 0;
 		left.value = 0;
 		right.value = 0;
-		pq.clear();		
+		pq.clear();
+		
+		// start the timing counter to put the frame rate on screen
+		// and make sure the start time is up to date, do
+		// a reset every 10 seconds
+		if (lMilliStart == 0)
+			lMilliStart = System.currentTimeMillis();
+
+		if ((lMilliNow - lMilliStart) > 10000) {
+			lMilliStart = System.currentTimeMillis();
+			lFrameCount = 0;
+		}
 		
 		inputFrame.copyTo(mRgba);
 		sMatSize.width = mRgba.width();
 		sMatSize.height = mRgba.height();
 
-		if (mMOP2fptsPrev.rows() == 0) {
+		switch (viewMode) {
 
-			// Log.d("Baz", "First time opflow");
-			// first time through the loop so we need prev and this mats
-			// plus prev points
-			// get this mat
-			Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGB2GRAY);
-			
-			// copy that to prev mat
-			matOpFlowThis.copyTo(matOpFlowPrev);
+		case VIEW_MODE_OPFLOW:
 
-			// get prev corners
-			Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax,0.05, 20);
+			if (mMOP2fptsPrev.rows() == 0) {
 
-			mMOP2fptsPrev.fromArray(MOPcorners.toArray());
+				// Log.d("Baz", "First time opflow");
+				// first time through the loop so we need prev and this mats
+				// plus prev points
+				// get this mat
+				Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
 
-			// get safe copy of this corners
-			mMOP2fptsPrev.copyTo(mMOP2fptsSafe);
-		} else {
-			// Log.d("Baz", "Opflow");
-			// we've been through before so
-			// this mat is valid. Copy it to prev mat
-			matOpFlowThis.copyTo(matOpFlowPrev);
+				// copy that to prev mat
+				matOpFlowThis.copyTo(matOpFlowPrev);
 
-			// get this mat
-			Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
+				// get prev corners
+				Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax, 0.05, 20);
+				Mat mask = new Mat();
+				int blockSize = 3;
+				boolean useHarrisDetector = true;
+				double k = 0.04;
+				//Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax, 0.05, 20,  mask, blockSize, useHarrisDetector, k);
+				mMOP2fptsPrev.fromArray(MOPcorners.toArray());
 
-			// get the corners for this mat
-			Imgproc.goodFeaturesToTrack(matOpFlowThis, MOPcorners, iGFFTMax,
-					0.05, 20);
-			mMOP2fptsThis.fromArray(MOPcorners.toArray());
+				// get safe copy of this corners
+				mMOP2fptsPrev.copyTo(mMOP2fptsSafe);
+			} else {
+				// Log.d("Baz", "Opflow");
+				// we've been through before so
+				// this mat is valid. Copy it to prev mat
+				matOpFlowThis.copyTo(matOpFlowPrev);
 
-			// retrieve the corners from the prev mat
-			// (saves calculating them again)
-			mMOP2fptsSafe.copyTo(mMOP2fptsPrev);
+				// get this mat
+				Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
 
-			// and save this corners for next time through
-			mMOP2fptsThis.copyTo(mMOP2fptsSafe);
-		}
-		Video.calcOpticalFlowPyrLK(matOpFlowPrev, matOpFlowThis, mMOP2fptsPrev,
-				mMOP2fptsThis, mMOBStatus, mMOFerr);
+				// get the corners for this mat
+				Imgproc.goodFeaturesToTrack(matOpFlowThis, MOPcorners, iGFFTMax, 0.05, 20);
+				mMOP2fptsThis.fromArray(MOPcorners.toArray());
 
-		cornersPrev = mMOP2fptsPrev.toList();
-		cornersThis = mMOP2fptsThis.toList();
-		byteStatus = mMOBStatus.toList();
+				// retrieve the corners from the prev mat
+				// (saves calculating them again)
+				mMOP2fptsSafe.copyTo(mMOP2fptsPrev);
 
-		y = byteStatus.size() - 1;
-
-		// burada bütün featurelarýn x
-		for (x = 0; x < y; x++) {
-			if (byteStatus.get(x) == 1) {
-				pt = cornersThis.get(x);
-				pt2 = cornersPrev.get(x);
-
-				double distance = Math.sqrt(Math.pow((pt.x - pt2.x), 2)
-						+ Math.pow((pt.y - pt2.y), 2));
-
-				if (distance < NOISE) {
-					ps.printf("Direction: ---");
-					fout.flush();
-					continue;
-				}
-
-				try {
-					ps.printf("Distance = %f\n", distance);
-					fout.flush();
-				} catch (FileNotFoundException e) {
-					e.printStackTrace();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-
-				double m = Math.abs(pt2.y - pt.y) / Math.abs(pt2.x - pt.x);
-
-				if (pt.x < pt2.x && pt2.y < pt.y)
-
-					if (m > 1)
-						up.value++;
-					else
-						right.value++;
-
-				else if (pt.x < pt2.x && pt2.y == pt.y)
-					right.value++;
-
-				else if (pt.x < pt2.x && pt2.y > pt.y)
-					if (m > 1)
-						down.value++;
-					else
-						right.value++;
-
-				else if (pt.x == pt2.x && pt2.y > pt.y)
-					down.value++;
-
-				else if (pt.x > pt2.x && pt2.y > pt.y)
-					if (m > 1)
-						down.value++;
-					else
-						left.value++;
-
-				else if (pt.x > pt2.x && pt2.y == pt.y)
-					left.value++;
-
-				else if (pt.x > pt2.x && pt2.y < pt.y)
-					if (m > 1)
-						up.value++;
-					else
-						left.value++;
-
-				else if (pt.x == pt2.x && pt2.y < pt.y)
-					up.value++;
-				Core.circle(mRgba, pt, 5, colorRed, iLineThickness - 1);
-				Core.line(mRgba, pt, pt2, colorRed, iLineThickness);
+				// and save this corners for next time through
+				mMOP2fptsThis.copyTo(mMOP2fptsSafe);
 			}
-		}// end of for
 
-		Direction r1, r2, r3;
+			Video.calcOpticalFlowPyrLK(matOpFlowPrev, matOpFlowThis, mMOP2fptsPrev, mMOP2fptsThis, mMOBStatus, mMOFerr);
 
-		if (up.value == 0 && left.value == 0 && right.value == 0
-				&& down.value == 0) {
-			ps.printf("Direction: ---");
-			fout.flush();
+			cornersPrev = mMOP2fptsPrev.toList();
+			cornersThis = mMOP2fptsThis.toList();
+			/*Integer cornerCount = cornersThis.size();
 
-		} else {
+			try {
+				ps.println("Harris corners count = " + cornerCount.toString() );
+				fout.flush();
+			} catch (FileNotFoundException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			*/
+			byteStatus = mMOBStatus.toList();
+ 
+			y = byteStatus.size() - 1;
 
-			if (left.value < right.value) {
-				r1 = left;
-			} else
-				r1 = right;
+			// burada bütün featurelarýn x
+			for (x = 0; x < y; x++) {
+				if (byteStatus.get(x) == 1) {
+					pt = cornersThis.get(x);
+					pt2 = cornersPrev.get(x);
+					
+					double distance= Math.sqrt(Math.pow((pt.x - pt2.x),2) + Math.pow((pt.y - pt2.y),2));
+					
+					if(distance < NOISE) {
+						string = String.format("Direction: ---");
+						showTitle(string, 3, colorRed);
+						continue;
+					}
+					
+//					try {
+//						ps.printf("Distance = %f\n", distance );
+//						fout.flush();
+//					} catch (FileNotFoundException e) {
+//						e.printStackTrace();
+//					} catch (IOException e) {
+//						e.printStackTrace();
+//					}
+					
+					double m = Math.abs(pt2.y - pt.y ) / Math.abs(pt2.x - pt.x);
+					
+					if (pt.x < pt2.x && pt2.y < pt.y)
 
-			if (up.value < down.value) {
-				r2 = up;
-			} else
-				r2 = down;
+						if (m > 1)
+							up.value++;
+						else
+							right.value++;
 
-			if (r1.value < r2.value) {
-				r3 = r2;
-			} else
-				r3 = r1;
+					else if (pt.x < pt2.x && pt2.y == pt.y)
+						right.value++;
 
-			string = String.format("Direction: %s", r3.name);
-			ps.printf(string);
-			fout.flush();
+					else if (pt.x < pt2.x && pt2.y > pt.y)
+						if (m > 1)
+							down.value++;
+						else
+							right.value++;
 
+					else if (pt.x == pt2.x && pt2.y > pt.y)
+						down.value++;
+
+					else if (pt.x > pt2.x && pt2.y > pt.y)
+						if (m > 1)
+							down.value++;
+						else
+							left.value++;
+
+					else if (pt.x > pt2.x && pt2.y == pt.y)
+						left.value++;
+
+					else if (pt.x > pt2.x && pt2.y < pt.y)
+						if (m > 1)
+							up.value++;
+						else
+							left.value++;
+
+					else if (pt.x == pt2.x && pt2.y < pt.y)
+						up.value++;
+					
+					Core.circle(mRgba, pt, 5, colorRed, iLineThickness - 1);
+					Core.line(mRgba, pt, pt2, colorRed, iLineThickness);
+				}
+			}//end of for
+			
+			Direction r1, r2, r3;
+			
+			if(up.value == 0 && left.value == 0 && right.value == 0 && down.value == 0) {
+				string = String.format("Direction: ---");
+				showTitle(string, 3, colorRed);
+				
+			}else{
+			
+				if (left.value < right.value) {
+					r1 = left;
+				} else r1 = right;
+				
+				if (up.value < down.value) {
+					r2 = up;
+				} else r2 = down;
+				
+				if (r1.value < r2.value) {
+					r3 = r2;
+				} else r3 = r1;
+				
+				string = String.format("Direction: %s", r3.name);
+				
+				for (HeadGestureListener listener : listeners) {
+				    listener.onHeadGestureDetected(r3.name);
+				}
+				
+				showTitle(string, 3, colorRed);
+			}
+			
+			//Log.d("Mukcay",pq.poll().name );
+			// Log.d("Baz", "Opflow feature count: "+x);
+			if (bDisplayTitle)
+				showTitle("Optical Flow", 1, colorGreen);
+				break;
 		}
-		
-		String file = "new"+filename;
-		Highgui.imwrite(file, mRgba);  // write to disk
-		
-		
+
+		// get the time now in every frame
+		lMilliNow = System.currentTimeMillis();
+
 		// update the frame counter
 		lFrameCount++;
+
+		if (bDisplayTitle) {
+			string = String.format("FPS: %2.1f", (float) (lFrameCount * 1000) / (float) (lMilliNow - lMilliStart));
+			showTitle(string, 2, colorGreen);
+		}
+
+		if (System.currentTimeMillis() - lMilliShotTime < 1500)
+			showTitle(sShotText, 3, colorRed);
 		
+		File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/output");
+		
+		if (!folder.exists()) {
+			Log.d("MUKCAY", "Dizin yok!");
+			folder.mkdirs();
+		}
+		
+		String pathName = folder+"/"+filename;
+		
+		Bitmap b = Bitmap.createBitmap(inputFrame.width(), inputFrame.height() ,Config.ARGB_8888);
+		Utils.matToBitmap(mRgba, b);
+		
+		File image = new File(pathName);
+		
+	    try {
+	        image.createNewFile();
+	        // BufferedOutputStream os = new BufferedOutputStream(
+	        // new FileOutputStream(file));
+
+	        FileOutputStream os = new FileOutputStream(image);
+	        b.compress(Bitmap.CompressFormat.JPEG, 100, os);
+	        os.flush();
+	        os.close();
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
 		return mRgba;
+
+		
+		
+		//SaveImage(mRgba, pathName);
+		
+//		Bitmap b = Bitmap.createBitmap(inputFrame.width(), inputFrame.height() ,Config.ARGB_8888);
+//		Utils.matToBitmap(mRgba, b);
+//		
+//		
+//		File image = new File(pathName);
+//	    try {
+//	        image.createNewFile();
+//	        // BufferedOutputStream os = new BufferedOutputStream(
+//	        // new FileOutputStream(file));
+//
+//	        FileOutputStream os = new FileOutputStream(image);
+//	        b.compress(Bitmap.CompressFormat.JPEG, 100, os);
+//	        os.flush();
+//	        os.close();
+//
+//
+//	    } catch (Exception e) {
+//	        e.printStackTrace();
+//	    }
+	    
+		//Highgui.imwrite(file, mRgba);  // write to disk
+		
+		// update the frame counter
 
 	}
 }

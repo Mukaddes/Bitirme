@@ -730,8 +730,8 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		}
 		
 		
-		Mat img = Highgui.imread(folder+"/"+testFileList.get(1));
-		onTestFrame(img, testFileList.get(1) );
+		Mat img = Highgui.imread(folder+"/"+testFileList.get(0));
+		onTestFrame(img, testFileList.get(0) );
 		
 		for (int i = 1; i < testFileList.size(); i++) {
 			img = Highgui.imread(folder+"/"+testFileList.get(i));
@@ -766,13 +766,14 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 			Log.d("MUKCAY", folder.getAbsolutePath());
 		}
 	}
+
 	public Mat onTestFrame(Mat inputFrame, String filename) throws IOException {
 		up.value = 0;
 		down.value = 0;
 		left.value = 0;
 		right.value = 0;
 		pq.clear();
-		
+
 		// start the timing counter to put the frame rate on screen
 		// and make sure the start time is up to date, do
 		// a reset every 10 seconds
@@ -783,179 +784,179 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 			lMilliStart = System.currentTimeMillis();
 			lFrameCount = 0;
 		}
-		
+
 		inputFrame.copyTo(mRgba);
 		sMatSize.width = mRgba.width();
 		sMatSize.height = mRgba.height();
 
-		switch (viewMode) {
+		if (mMOP2fptsPrev.rows() == 0) {
 
-		case VIEW_MODE_OPFLOW:
+			// Log.d("Baz", "First time opflow");
+			// first time through the loop so we need prev and this mats
+			// plus prev points
+			// get this mat
+			Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
 
-			if (mMOP2fptsPrev.rows() == 0) {
+			// copy that to prev mat
+			matOpFlowThis.copyTo(matOpFlowPrev);
 
-				// Log.d("Baz", "First time opflow");
-				// first time through the loop so we need prev and this mats
-				// plus prev points
-				// get this mat
-				Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
+			// get prev corners
+			Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax,
+					0.05, 20);
+			Mat mask = new Mat();
+			int blockSize = 3;
+			boolean useHarrisDetector = true;
+			double k = 0.04;
+			// Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax,
+			// 0.05, 20, mask, blockSize, useHarrisDetector, k);
+			mMOP2fptsPrev.fromArray(MOPcorners.toArray());
 
-				// copy that to prev mat
-				matOpFlowThis.copyTo(matOpFlowPrev);
+			// get safe copy of this corners
+			mMOP2fptsPrev.copyTo(mMOP2fptsSafe);
+		} else {
+			// Log.d("Baz", "Opflow");
+			// we've been through before so
+			// this mat is valid. Copy it to prev mat
+			matOpFlowThis.copyTo(matOpFlowPrev);
 
-				// get prev corners
-				Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax, 0.05, 20);
-				Mat mask = new Mat();
-				int blockSize = 3;
-				boolean useHarrisDetector = true;
-				double k = 0.04;
-				//Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax, 0.05, 20,  mask, blockSize, useHarrisDetector, k);
-				mMOP2fptsPrev.fromArray(MOPcorners.toArray());
+			// get this mat
+			Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
 
-				// get safe copy of this corners
-				mMOP2fptsPrev.copyTo(mMOP2fptsSafe);
-			} else {
-				// Log.d("Baz", "Opflow");
-				// we've been through before so
-				// this mat is valid. Copy it to prev mat
-				matOpFlowThis.copyTo(matOpFlowPrev);
+			// get the corners for this mat
+			Imgproc.goodFeaturesToTrack(matOpFlowThis, MOPcorners, iGFFTMax,
+					0.05, 20);
+			mMOP2fptsThis.fromArray(MOPcorners.toArray());
 
-				// get this mat
-				Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
+			// retrieve the corners from the prev mat
+			// (saves calculating them again)
+			mMOP2fptsSafe.copyTo(mMOP2fptsPrev);
 
-				// get the corners for this mat
-				Imgproc.goodFeaturesToTrack(matOpFlowThis, MOPcorners, iGFFTMax, 0.05, 20);
-				mMOP2fptsThis.fromArray(MOPcorners.toArray());
+			// and save this corners for next time through
+			mMOP2fptsThis.copyTo(mMOP2fptsSafe);
+		}
 
-				// retrieve the corners from the prev mat
-				// (saves calculating them again)
-				mMOP2fptsSafe.copyTo(mMOP2fptsPrev);
+		Video.calcOpticalFlowPyrLK(matOpFlowPrev, matOpFlowThis, mMOP2fptsPrev,
+				mMOP2fptsThis, mMOBStatus, mMOFerr);
 
-				// and save this corners for next time through
-				mMOP2fptsThis.copyTo(mMOP2fptsSafe);
-			}
+		cornersPrev = mMOP2fptsPrev.toList();
+		cornersThis = mMOP2fptsThis.toList();
+		/*
+		 * Integer cornerCount = cornersThis.size();
+		 * 
+		 * try { ps.println("Harris corners count = " + cornerCount.toString()
+		 * ); fout.flush(); } catch (FileNotFoundException e) {
+		 * e.printStackTrace(); } catch (IOException e) { e.printStackTrace(); }
+		 */
+		byteStatus = mMOBStatus.toList();
 
-			Video.calcOpticalFlowPyrLK(matOpFlowPrev, matOpFlowThis, mMOP2fptsPrev, mMOP2fptsThis, mMOBStatus, mMOFerr);
+		y = byteStatus.size() - 1;
 
-			cornersPrev = mMOP2fptsPrev.toList();
-			cornersThis = mMOP2fptsThis.toList();
-			/*Integer cornerCount = cornersThis.size();
+		// burada bütün featurelarýn x
+		for (x = 0; x < y; x++) {
+			if (byteStatus.get(x) == 1) {
+				pt = cornersThis.get(x);
+				pt2 = cornersPrev.get(x);
 
-			try {
-				ps.println("Harris corners count = " + cornerCount.toString() );
-				fout.flush();
-			} catch (FileNotFoundException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			*/
-			byteStatus = mMOBStatus.toList();
- 
-			y = byteStatus.size() - 1;
+				double distance = Math.sqrt(Math.pow((pt.x - pt2.x), 2)
+						+ Math.pow((pt.y - pt2.y), 2));
 
-			// burada bütün featurelarýn x
-			for (x = 0; x < y; x++) {
-				if (byteStatus.get(x) == 1) {
-					pt = cornersThis.get(x);
-					pt2 = cornersPrev.get(x);
-					
-					double distance= Math.sqrt(Math.pow((pt.x - pt2.x),2) + Math.pow((pt.y - pt2.y),2));
-					
-					if(distance < NOISE) {
-						string = String.format("Direction: ---");
-						showTitle(string, 3, colorRed);
-						continue;
-					}
-					
-//					try {
-//						ps.printf("Distance = %f\n", distance );
-//						fout.flush();
-//					} catch (FileNotFoundException e) {
-//						e.printStackTrace();
-//					} catch (IOException e) {
-//						e.printStackTrace();
-//					}
-					
-					double m = Math.abs(pt2.y - pt.y ) / Math.abs(pt2.x - pt.x);
-					
-					if (pt.x < pt2.x && pt2.y < pt.y)
+				if (distance < NOISE) {
+					string = String.format("Direction: ---");
+					showTitle(string, 3, colorRed);
+					continue;
+				}
 
-						if (m > 1)
-							up.value++;
-						else
-							right.value++;
+				// try {
+				// ps.printf("Distance = %f\n", distance );
+				// fout.flush();
+				// } catch (FileNotFoundException e) {
+				// e.printStackTrace();
+				// } catch (IOException e) {
+				// e.printStackTrace();
+				// }
 
-					else if (pt.x < pt2.x && pt2.y == pt.y)
+				double m = Math.abs(pt2.y - pt.y) / Math.abs(pt2.x - pt.x);
+
+				if (pt.x < pt2.x && pt2.y < pt.y)
+
+					if (m > 1)
+						up.value++;
+					else
 						right.value++;
 
-					else if (pt.x < pt2.x && pt2.y > pt.y)
-						if (m > 1)
-							down.value++;
-						else
-							right.value++;
+				else if (pt.x < pt2.x && pt2.y == pt.y)
+					right.value++;
 
-					else if (pt.x == pt2.x && pt2.y > pt.y)
+				else if (pt.x < pt2.x && pt2.y > pt.y)
+					if (m > 1)
 						down.value++;
+					else
+						right.value++;
 
-					else if (pt.x > pt2.x && pt2.y > pt.y)
-						if (m > 1)
-							down.value++;
-						else
-							left.value++;
+				else if (pt.x == pt2.x && pt2.y > pt.y)
+					down.value++;
 
-					else if (pt.x > pt2.x && pt2.y == pt.y)
+				else if (pt.x > pt2.x && pt2.y > pt.y)
+					if (m > 1)
+						down.value++;
+					else
 						left.value++;
 
-					else if (pt.x > pt2.x && pt2.y < pt.y)
-						if (m > 1)
-							up.value++;
-						else
-							left.value++;
+				else if (pt.x > pt2.x && pt2.y == pt.y)
+					left.value++;
 
-					else if (pt.x == pt2.x && pt2.y < pt.y)
+				else if (pt.x > pt2.x && pt2.y < pt.y)
+					if (m > 1)
 						up.value++;
-					
-					Core.circle(mRgba, pt, 5, colorRed, iLineThickness - 1);
-					Core.line(mRgba, pt, pt2, colorRed, iLineThickness);
-				}
-			}//end of for
-			
-			Direction r1, r2, r3;
-			
-			if(up.value == 0 && left.value == 0 && right.value == 0 && down.value == 0) {
-				string = String.format("Direction: ---");
-				showTitle(string, 3, colorRed);
-				
-			}else{
-			
-				if (left.value < right.value) {
-					r1 = left;
-				} else r1 = right;
-				
-				if (up.value < down.value) {
-					r2 = up;
-				} else r2 = down;
-				
-				if (r1.value < r2.value) {
-					r3 = r2;
-				} else r3 = r1;
-				
-				string = String.format("Direction: %s", r3.name);
-				
-				for (HeadGestureListener listener : listeners) {
-				    listener.onHeadGestureDetected(r3.name);
-				}
-				
-				showTitle(string, 3, colorRed);
+					else
+						left.value++;
+
+				else if (pt.x == pt2.x && pt2.y < pt.y)
+					up.value++;
+
+				Core.circle(mRgba, pt, 5, colorRed, iLineThickness - 1);
+				Core.line(mRgba, pt, pt2, colorRed, iLineThickness);
 			}
-			
-			//Log.d("Mukcay",pq.poll().name );
-			// Log.d("Baz", "Opflow feature count: "+x);
-			if (bDisplayTitle)
-				showTitle("Optical Flow", 1, colorGreen);
-				break;
+		}// end of for
+
+		Direction r1, r2, r3;
+
+		if (up.value == 0 && left.value == 0 && right.value == 0
+				&& down.value == 0) {
+			string = String.format("Direction: ---");
+			showTitle(string, 3, colorRed);
+
+		} else {
+
+			if (left.value < right.value) {
+				r1 = left;
+			} else
+				r1 = right;
+
+			if (up.value < down.value) {
+				r2 = up;
+			} else
+				r2 = down;
+
+			if (r1.value < r2.value) {
+				r3 = r2;
+			} else
+				r3 = r1;
+
+			string = String.format("Direction: %s", r3.name);
+
+			for (HeadGestureListener listener : listeners) {
+				listener.onHeadGestureDetected(r3.name);
+			}
+
+			showTitle(string, 3, colorRed);
 		}
+
+		// Log.d("Mukcay",pq.poll().name );
+		// Log.d("Baz", "Opflow feature count: "+x);
+		if (bDisplayTitle)
+			showTitle("Optical Flow", 1, colorGreen);
+
 
 		// get the time now in every frame
 		lMilliNow = System.currentTimeMillis();
@@ -964,67 +965,70 @@ public class HeadGestureDetect extends Activity implements CvCameraViewListener 
 		lFrameCount++;
 
 		if (bDisplayTitle) {
-			string = String.format("FPS: %2.1f", (float) (lFrameCount * 1000) / (float) (lMilliNow - lMilliStart));
+			string = String.format("FPS: %2.1f", (float) (lFrameCount * 1000)
+					/ (float) (lMilliNow - lMilliStart));
 			showTitle(string, 2, colorGreen);
 		}
 
 		if (System.currentTimeMillis() - lMilliShotTime < 1500)
 			showTitle(sShotText, 3, colorRed);
-		
-		File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getPath()+"/output");
-		
+
+		File folder = new File(Environment.getExternalStoragePublicDirectory(
+				Environment.DIRECTORY_DOCUMENTS).getPath()
+				+ "/output");
+
 		if (!folder.exists()) {
 			Log.d("MUKCAY", "Dizin yok!");
 			folder.mkdirs();
 		}
-		
-		String pathName = folder+"/"+filename;
-		
-		Bitmap b = Bitmap.createBitmap(inputFrame.width(), inputFrame.height() ,Config.ARGB_8888);
-		Utils.matToBitmap(mRgba, b);
-		
-		File image = new File(pathName);
-		
-	    try {
-	        image.createNewFile();
-	        // BufferedOutputStream os = new BufferedOutputStream(
-	        // new FileOutputStream(file));
 
-	        FileOutputStream os = new FileOutputStream(image);
-	        b.compress(Bitmap.CompressFormat.JPEG, 100, os);
-	        os.flush();
-	        os.close();
-	    } catch (Exception e) {
-	        e.printStackTrace();
-	    }
+		String pathName = folder + "/" + filename;
+
+		Bitmap b = Bitmap.createBitmap(inputFrame.width(), inputFrame.height(),
+				Config.ARGB_8888);
+		Utils.matToBitmap(mRgba, b);
+
+		File image = new File(pathName);
+
+		try {
+			image.createNewFile();
+			// BufferedOutputStream os = new BufferedOutputStream(
+			// new FileOutputStream(file));
+
+			FileOutputStream os = new FileOutputStream(image);
+			b.compress(Bitmap.CompressFormat.JPEG, 100, os);
+			os.flush();
+			os.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		return mRgba;
 
-		
-		
-		//SaveImage(mRgba, pathName);
-		
-//		Bitmap b = Bitmap.createBitmap(inputFrame.width(), inputFrame.height() ,Config.ARGB_8888);
-//		Utils.matToBitmap(mRgba, b);
-//		
-//		
-//		File image = new File(pathName);
-//	    try {
-//	        image.createNewFile();
-//	        // BufferedOutputStream os = new BufferedOutputStream(
-//	        // new FileOutputStream(file));
-//
-//	        FileOutputStream os = new FileOutputStream(image);
-//	        b.compress(Bitmap.CompressFormat.JPEG, 100, os);
-//	        os.flush();
-//	        os.close();
-//
-//
-//	    } catch (Exception e) {
-//	        e.printStackTrace();
-//	    }
-	    
-		//Highgui.imwrite(file, mRgba);  // write to disk
-		
+		// SaveImage(mRgba, pathName);
+
+		// Bitmap b = Bitmap.createBitmap(inputFrame.width(),
+		// inputFrame.height() ,Config.ARGB_8888);
+		// Utils.matToBitmap(mRgba, b);
+		//
+		//
+		// File image = new File(pathName);
+		// try {
+		// image.createNewFile();
+		// // BufferedOutputStream os = new BufferedOutputStream(
+		// // new FileOutputStream(file));
+		//
+		// FileOutputStream os = new FileOutputStream(image);
+		// b.compress(Bitmap.CompressFormat.JPEG, 100, os);
+		// os.flush();
+		// os.close();
+		//
+		//
+		// } catch (Exception e) {
+		// e.printStackTrace();
+		// }
+
+		// Highgui.imwrite(file, mRgba); // write to disk
+
 		// update the frame counter
 
 	}
